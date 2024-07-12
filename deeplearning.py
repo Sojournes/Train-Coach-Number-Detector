@@ -18,26 +18,25 @@ net.setPreferableTarget(cv2.dnn.DNN_TARGET_CPU)
 
 
 
-def get_detections(img,net):
+def get_detections(img, net):
     # CONVERT IMAGE TO YOLO FORMAT
     image = img.copy()
     row, col, d = image.shape
 
-    max_rc = max(row,col)
-    input_image = np.zeros((max_rc,max_rc,3),dtype=np.uint8)
-    input_image[0:row,0:col] = image
+    max_rc = max(row, col)
+    input_image = np.zeros((max_rc, max_rc, 3), dtype=np.uint8)
+    input_image[0:row, 0:col] = image
 
     # GET PREDICTION FROM YOLO MODEL
-    blob = cv2.dnn.blobFromImage(input_image,1/255,(INPUT_WIDTH,INPUT_HEIGHT),swapRB=True,crop=False)
+    blob = cv2.dnn.blobFromImage(input_image, 1/255, (INPUT_WIDTH, INPUT_HEIGHT), swapRB=True, crop=False)
     net.setInput(blob)
     preds = net.forward()
     detections = preds[0]
     
     return input_image, detections
 
-def non_maximum_supression(input_image,detections):
-    # FILTER DETECTIONS BASED ON CONFIDENCE AND PROBABILIY SCORE
-    # center x, center y, w , h, conf, proba
+def non_maximum_supression(input_image, detections):
+    # FILTER DETECTIONS BASED ON CONFIDENCE AND PROBABILITY SCORE
     boxes = []
     confidences = []
 
@@ -57,7 +56,7 @@ def non_maximum_supression(input_image,detections):
                 top = int((cy-0.5*h)*y_factor)
                 width = int(w*x_factor)
                 height = int(h*y_factor)
-                box = np.array([left,top,width,height])
+                box = np.array([left, top, width, height])
 
                 confidences.append(confidence)
                 boxes.append(box)
@@ -66,7 +65,7 @@ def non_maximum_supression(input_image,detections):
     boxes_np = np.array(boxes).tolist()
     confidences_np = np.array(confidences).tolist()
     # NMS
-    index = np.array(cv2.dnn.NMSBoxes(boxes_np,confidences_np,0.1,0.1)).flatten()
+    index = np.array(cv2.dnn.NMSBoxes(boxes_np, confidences_np, 0.1, 0.1)).flatten()
     
     return boxes_np, confidences_np, index
 
@@ -192,31 +191,44 @@ def rotate_y(img, y):
     dst = cv2.warpPerspective(canvas, final, (bound_w, bound_h), None, cv2.INTER_LINEAR, cv2.BORDER_CONSTANT, (0, 0, 0))
     return dst
 
+# Add this function to rotate along the z-axis
+def rotate_z(img, angle):
+    height, width = img.shape[:2]
+    center = (width // 2, height // 2)
+    rot_matrix = cv2.getRotationMatrix2D(center, angle, 1.0)
+    rotated_img = cv2.warpAffine(img, rot_matrix, (width, height), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT, borderValue=(0, 0, 0))
+    return rotated_img
+
+# Modify the process_images_with_yolo function to include both rotations
 def process_images_with_yolo(img, net, angles):
-    images = [rotate_y(img, angle) for angle in angles]
-    images.append(img)  # Original image
+    z_rotated_images = [rotate_z(img, angle) for angle in angles]
+    y_rotated_images = [rotate_y(z_img, angle) for z_img in z_rotated_images for angle in angles]
 
     best_image = None
     highest_correct_factor = 0
     correct_text = None
 
-    for rotated_img in images:
-        result_img,text_result, correct_factor = yolo_predictions(rotated_img, net)
-        text_result = text_result.replace(" ","")
+    for rotated_img in y_rotated_images:
+        result_img, text_result, correct_factor = yolo_predictions(rotated_img, net)
+        text_result = text_result.replace(" ", "")
         match = re.search(r'\b\d{6}\b', text_result)
         if match and correct_factor > highest_correct_factor:
             highest_correct_factor = correct_factor
             best_image = result_img
             correct_text = match.group()
 
-    return best_image,correct_text
+    if best_image is None:
+        return img, "No text detected"
 
-angles = [-12,-11,-10,-9,-8,-7,-6,-5,-4,-3,-2,-1,1,2,3,4,5,6,7,8,9,10,11,12]
+    return best_image, correct_text
 
-def object_detection(path,filename):
-    # read image
-    image = cv2.imread(path) # PIL object
-    image = np.array(image,dtype=np.uint8) # 8 bit array (0,255)
-    result_img, text_list = process_images_with_yolo(image,net,angles)
-    cv2.imwrite('./static/predict/{}'.format(filename),result_img)
+# Keep the original set of angles
+angles = [ -10,-8,-6,-4,-2,2,4,6,8,10]
+
+# Ensure this function calls the updated process_images_with_yolo
+def object_detection(path, filename):
+    image = cv2.imread(path)  # Read image
+    image = np.array(image, dtype=np.uint8)  # Convert to 8-bit array
+    result_img, text_list = process_images_with_yolo(image, net, angles)
+    cv2.imwrite('./static/predict/{}'.format(filename), result_img)
     return [text_list]
