@@ -62,7 +62,7 @@ This project utilizes YOLO (You Only Look Once) for object detection and Tessera
 To improve the accuracy of OCR, images are rotated by specified angles. The train number is generally aligned such that it goes from bigger to smaller. By rotating the images, the text becomes more readable for Tesseract, thus enhancing the recognition accuracy.
 
 ```python
-angles = [-12, -11, -10, -9, -8, -7, -6, -5, -4, -3, -2, -1, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+angles = [ -10,-8,-6,-4,-2,2,4,6,8,10]
 ```
 
 Each image is rotated through these angles, and OCR is performed on each rotated image. The image that yields the highest confidence score from Tesseract is selected as the best result.
